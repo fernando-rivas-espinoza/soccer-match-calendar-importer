@@ -1,39 +1,57 @@
 import os
 from dotenv import load_dotenv
 import http.client
-from datetime import date, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 import json
 
-def fetch_schedule(team: str):
-    today = date.today(timezone.utc).date()
+API_HOST = "api.football-data.org"
 
-    # The api sets the 'season' value to be the year a season starts
-    # A european season ends after July when including int'l competitions
-    season = today.year if today.month > 7 else today.year - 1
+
+def _error_message(body: str) -> str:
+    """football-data.org reports failures as {"message": ..., "errorCode": ...}."""
+    try:
+        return json.loads(body).get("message", body[:200])
+    except ValueError:
+        return body[:200]
+
+
+def fetch_fixtures(team: str):
+    today = datetime.now(timezone.utc).date()
+    window_end = today + timedelta(weeks=2)
 
     load_dotenv()
-    api_key = os.getenv("API_FOOTBALL_KEY")
-    client = http.client.HTTPSConnection("v3.football.api-sports.io")
-    
+    api_key = os.getenv("FOOTBALL_DATA_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "FOOTBALL_DATA_KEY is not set; add your football-data.org token to .env"
+        )
+
     headers = {
-        'x-apisports-key': api_key
+        'X-Auth-Token': api_key
         }
-    
-    request = f"/fixtures?team={team}&season={season}&from={today}&to={today + timedelta(weeks=2)}"
-    client.request("GET",request, headers=headers)
-    res = client.getresponse()
-    body = res.read().decode("utf-8")
 
-    if res.status != 200:
-        raise RuntimeError(f"api-football returned {res.status} {res.reason}")
+    # The team id is a path segment on this api, and the date window filters
+    # across every competition the team is in, so no season filter is needed.
+    request = (
+        f"/v4/teams/{team}/matches"
+        f"?status=SCHEDULED&dateFrom={today}&dateTo={window_end}"
+    )
 
+    client = http.client.HTTPSConnection(API_HOST)
     try:
-        payload = json.loads(body)
-    except Exception as e:
-        print(f"Error: Malformed JSON \n{e}")
-        exit(1)
+        client.request("GET", request, headers=headers)
+        res = client.getresponse()
+        body = res.read().decode("utf-8")
+        status, reason = res.status, res.reason
     finally:
         client.close()
 
-    return payload
+    if status != 200:
+        raise RuntimeError(
+            f"football-data.org returned {status} {reason}: {_error_message(body)}"
+        )
 
+    try:
+        return json.loads(body)
+    except ValueError as e:
+        raise RuntimeError(f"football-data.org returned malformed JSON: {e}") from e
