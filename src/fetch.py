@@ -1,11 +1,11 @@
 import os
 from dotenv import load_dotenv
 import http.client
-from datetime import date, timedelta
+from datetime import date, timedelta, timezone
 import json
 
-def fetch_schedule(team: str, c: list[str]):
-    today = date.today()
+def fetch_schedule(team: str):
+    today = date.today(timezone.utc).date()
 
     # The api sets the 'season' value to be the year a season starts
     # A european season ends after July when including int'l competitions
