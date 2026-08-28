@@ -1,7 +1,8 @@
 from .api_request import make_request 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-LEAGUE_IDS = {
+# Football-data.org codes for the top 5 european leagues 
+LEAGUE_CODES = {
     "la_liga": "PD",
     "premier_league": "PL",
     "ligue_1": "FL1", 
@@ -9,15 +10,24 @@ LEAGUE_IDS = {
     "serie_a": "SA"
 }
 
-def parse_api_response(response):
+# Extract team names and ids
+def parse_teams_response(response):
+    teams = response.get("teams")
+    if teams is None:
+        raise ValueError(
+            "response has no 'teams' key; got keys "
+            f"{sorted(response)}"
+        )
+
     name_id_map = {}
 
-    for team in response["teams"]:
+    for team in teams:
         name_id_map[team["name"]] = team["id"]
 
     return name_id_map
 
 
+# Get the teams in each of the top 5 european leagues for this season
 def get_teams():
     date = datetime.now(timezone.utc).date()
 
@@ -26,11 +36,11 @@ def get_teams():
 
     all_teams = {}
 
-    for league_name, league_id in LEAGUE_IDS.items():
-        resource = f"/competitions/{league_id}/teams"
-        filters = f"?season={season}"
-        raw_response = make_request(Resource=resource, Filters=filters)
-        all_teams[league_name] = parse_api_response(raw_response)
+    for league_name, league_code in LEAGUE_CODES.items():
+        raw_response = make_request(
+            f"/competitions/{league_code}/teams", {"season": season}
+        )
+        all_teams[league_name] = parse_teams_response(raw_response)
 
     return all_teams
 

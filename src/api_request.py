@@ -1,8 +1,9 @@
 import os
 from dotenv import load_dotenv
 import http.client
-from datetime import datetime, timedelta, timezone
 import json
+from typing import Optional
+from urllib.parse import urlencode
 
 API_HOST = "api.football-data.org"
 
@@ -13,7 +14,7 @@ def _error_message(body: str) -> str:
     except ValueError:
         return body[:200]
 
-def make_request(Resource: str, Filters:str):
+def make_request(resource: str, params: Optional[dict] = None):
     load_dotenv()
     api_key = os.getenv("FOOTBALL_DATA_KEY")
     if not api_key:
@@ -25,12 +26,10 @@ def make_request(Resource: str, Filters:str):
         'X-Auth-Token': api_key
         }
 
-    # The team id is a path segment on this api, and the date window filters
-    # across every competition the team is in, so no season filter is needed.
-    request = (
-        f"/v4{Resource}",
-        Filters
-    )
+    # urlencode handles the "?" separator, escaping and str() conversion,
+    # so callers pass plain values rather than pre-built query strings.
+    query = f"?{urlencode(params)}" if params else ""
+    request = f"/v4{resource}{query}"
 
     client = http.client.HTTPSConnection(API_HOST)
     try:

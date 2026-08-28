@@ -5,7 +5,7 @@ def fetch_fixtures(team: str):
     today = datetime.now(timezone.utc).date()
     window_end = today + timedelta(weeks=2)
 
-    resource = f"/teams/{team}/matches"
-    filters = f"?status=SCHEDULED&dateFrom={today}&dateTo={window_end}"
-
-    return make_request(Resource=resource, Filters=filters)
+    return make_request(
+        f"/teams/{team}/matches",
+        {"status": "SCHEDULED", "dateFrom": today, "dateTo": window_end},
+    )
