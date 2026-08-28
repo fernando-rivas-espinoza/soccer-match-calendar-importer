@@ -10,7 +10,7 @@ def main():
 
     if not Path("teams_schedule.json").is_file():
             with open("teams_schedule.json", "w") as file:
-                json.dump(fetch_fixtures(team = "81"), file, indent=2, ensure_ascii=False)
+                json.dump(fetch_fixtures(team_id = "81", initial_run=True), file, indent=2, ensure_ascii=False)
 
 
 if __name__ == "__main__": 

@@ -1,15 +1,16 @@
 from .api_request import make_request
 from datetime import datetime, timedelta, timezone
 
-def extract_schedule(Response, team_id):
+# Keep only necessary information from API output
+def extract_schedule(response, team_id) -> dict:
     pruned = {}
-    for match in Response["matches"]:
+    for match in response["matches"]:
         matchdate = match["utcDate"]
-        pruned["matchday"] = matchdate
-        curr_match = pruned[matchdate]
-        curr_match["matchday"] = match["season"]["currentMatchday"]
+        curr_match = pruned.setdefault(matchdate, {})
+        curr_match["matchday"] = match["matchday"]
 
-        if match["homeTeam"]["id"] != team_id:
+        # The api reports ids as ints; team_id arrives as a string from the caller.
+        if int(match["homeTeam"]["id"]) != int(team_id):
             curr_match["venue_status"] = "away"
             curr_match["opponent_name"] = match["homeTeam"]["name"]
             curr_match["opponent_id"] = match["homeTeam"]["id"]
@@ -23,7 +24,7 @@ def extract_schedule(Response, team_id):
 
     return pruned
 
-def fetch_fixtures(team_id: str, initial_run: bool):
+def fetch_fixtures(team_id: str, initial_run: bool) -> dict:
 
     if initial_run:
         response = make_request(
@@ -40,4 +41,4 @@ def fetch_fixtures(team_id: str, initial_run: bool):
             {"status": "SCHEDULED", "dateFrom": today, "dateTo": window_end},
         )
 
-    return extract_schedule(Response=response)
+    return extract_schedule(response=response, team_id=team_id)
