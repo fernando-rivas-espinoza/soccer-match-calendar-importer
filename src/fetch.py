@@ -19,7 +19,8 @@ def extract_schedule(response, team_id) -> dict:
             curr_match["opponent_name"] = match["awayTeam"]["name"]
             curr_match["opponent_id"] = match["awayTeam"]["id"]
 
-        curr_match["competition_name"] = match["competition"]["name"]
+        # Use La Liga as the name for the spanish first division (stylistic choice)
+        curr_match["competition_name"] = match["competition"]["name"] if match["competition"]["name"] != "Primera Division" else "La Liga" 
         curr_match["competition_id"] = match["competition"]["id"]
 
     return pruned
@@ -36,6 +37,7 @@ def fetch_fixtures(team_id: str, initial_run: bool) -> dict:
         today = datetime.now(timezone.utc).date()
         window_end = today + timedelta(weeks=2)
 
+        # TODO: Add handling for champions league draws
         response = make_request(
             f"/teams/{team_id}/matches",
             {"status": "SCHEDULED", "dateFrom": today, "dateTo": window_end},
