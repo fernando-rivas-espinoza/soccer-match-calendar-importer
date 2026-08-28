@@ -15,7 +15,7 @@ The data-fetching half is working. The calendar half is not yet built.
 | Module | State | Purpose |
 | --- | --- | --- |
 | `api_request.py` | **Working** | HTTPS transport, auth, query encoding, error handling |
-| `fetch.py` | **Working** | Upcoming fixtures for one team over a two-week window |
+| `fetch.py` | **Working** | Upcoming fixtures for one team, pruned to the fields a calendar needs |
 | `models.py` | **Working** | Team name to team id maps for the top 5 European leagues |
 | `__main__.py` | **Working** | Runner; writes both payloads to JSON on disk |
 | `translate.py` | Empty | Turn raw match data into `ics` calendar events |
@@ -64,8 +64,10 @@ the previous year. This lives in `models.get_teams`.
 
 ### Date window
 
-`fetch_fixtures` asks for `SCHEDULED` matches from today to two weeks out, using
-UTC dates to match the API's own clock.
+`fetch_fixtures` takes an `initial_run` flag. On a first run it asks for every
+`SCHEDULED` match the API will give, seeding the calendar with the whole season.
+On a refresh it narrows to today through two weeks out, using UTC dates to match
+the API's own clock.
 
 ## Setup
 
@@ -102,7 +104,7 @@ python -m src
 On first run this writes two files to the repo root:
 
 - `european_teams.json` — team name to id for all 5 leagues, ~96 teams
-- `teams_schedule.json` — the target team's scheduled matches for the next 2 weeks
+- `teams_schedule.json` — the target team's scheduled matches, keyed by kickoff time
 
 Both are skipped if the file already exists, so repeat runs cost no API
 requests. Delete a file to refresh it.
@@ -144,12 +146,13 @@ Two constraints worth knowing:
 .venv/bin/python -m pytest
 ```
 
-30 tests, no network access. `http.client.HTTPSConnection` is replaced with an
+46 tests, no network access. `http.client.HTTPSConnection` is replaced with an
 in-memory fake and `load_dotenv` is stubbed out, so the suite never reads the
 real `.env` or spends rate limit.
 
 - `tests/test_fetch.py` — request construction, auth header, error statuses,
-  connection lifetime, missing-token handling
+  connection lifetime, missing-token handling, both date-window modes, and the
+  pruning that turns an api payload into a schedule
 - `tests/test_models.py` — team extraction, payload-shape guard, per-league
   request shape, season cutover
 
@@ -158,3 +161,19 @@ real `.env` or spends rate limit.
 - `translate.py`, `sync.py`, `caldav_client.py` — the entire calendar half
 - `cli.py` — needs rewriting for this project's arguments
 - `CRON/` — empty; no schedule is configured yet
+
+### A `Fixture` dataclass, before `translate.py`
+
+`extract_schedule` currently returns a dict of dicts keyed by kickoff time. That
+shape needs to become a `Fixture` dataclass keyed by the API's match id first,
+because the calendar layer depends on two things it does not yet provide:
+
+- An iCalendar `VEVENT` needs a stable `UID`. The API's `match["id"]` is the
+  only field that survives a reschedule, and it is currently discarded even
+  though it is already in the payload. Keyed by kickoff, a moved match reads as
+  a delete plus a create rather than an event to update in place.
+- `DTEND` is `DTSTART` plus a duration, so the kickoff wants to be an aware
+  `datetime` parsed once at the API boundary rather than a string every consumer
+  reparses.
+
+The full note is in the TODO at the top of `src/fetch.py`.

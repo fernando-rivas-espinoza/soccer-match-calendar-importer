@@ -5,8 +5,9 @@ from datetime import datetime, timedelta, timezone
 def extract_schedule(response, team_id) -> dict:
     pruned = {}
     for match in response["matches"]:
-        matchdate = match["utcDate"]
-        curr_match = pruned.setdefault(matchdate, {})
+        
+        curr_match = pruned[match["id"]]
+        curr_match["match_date"] = match["utcDate"]
         curr_match["matchday"] = match["matchday"]
 
         # The api reports ids as ints; team_id arrives as a string from the caller.
