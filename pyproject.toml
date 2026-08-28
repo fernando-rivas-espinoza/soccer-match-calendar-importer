@@ -1,0 +1,19 @@
+[project]
+name = "soccer-match-calendar-importer"
+version = "0.1.0"
+description = "Imports a team's soccer match schedule into an iCloud calendar."
+requires-python = ">=3.9"
+dependencies = [
+    "python-dotenv",
+    # Named in README.md's architecture; used once translate.py / sync.py exist.
+    # ics is pinned to the 0.7 line: 0.8 is a rewrite with a different api.
+    "ics>=0.7.3,<0.8",
+    "caldav>=2.2,<3",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

@@ -19,12 +19,7 @@ def parse_teams_response(response):
             f"{sorted(response)}"
         )
 
-    name_id_map = {}
-
-    for team in teams:
-        name_id_map[team["name"]] = team["id"]
-
-    return name_id_map
+    return {team["name"]: team["id"] for team in teams}
 
 
 # Get the teams in each of the top 5 european leagues for this season
