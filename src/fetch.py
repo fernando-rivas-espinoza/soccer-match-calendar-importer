@@ -5,8 +5,7 @@ from datetime import datetime, timedelta, timezone
 def extract_schedule(response, team_id) -> dict:
     pruned = {}
     for match in response["matches"]:
-        
-        curr_match = pruned[match["id"]]
+        curr_match = pruned.setdefault(match["id"], {})
         curr_match["match_date"] = match["utcDate"]
         curr_match["matchday"] = match["matchday"]
 

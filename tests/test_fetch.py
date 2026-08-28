@@ -117,7 +117,7 @@ class TestResponse:
     ):
         frozen_date(2026, 8, 27)
         schedule = fetch_fixtures("81", initial_run=True)
-        assert list(schedule) == ["2026-08-29T19:00:00Z"]
+        assert list(schedule) == [497855]
         assert "matches" not in schedule
 
     def test_closes_the_connection_on_success(self, http, api_key, frozen_date):
@@ -173,20 +173,38 @@ class TestResponse:
 
 
 class TestExtractSchedule:
-    def test_keys_are_kickoff_timestamps(self):
-        assert list(extract_schedule(SAMPLE_MATCHES, "81")) == ["2026-08-29T19:00:00Z"]
+    def test_keys_are_the_api_match_ids(self):
+        """The key becomes the calendar UID, so it must survive a reschedule."""
+        assert list(extract_schedule(SAMPLE_MATCHES, "81")) == [497855]
+
+    def test_a_rescheduled_match_keeps_its_key(self):
+        """A moved kickoff must read as an update, not a second event."""
+        moved = {
+            "matches": [
+                dict(SAMPLE_MATCHES["matches"][0], utcDate="2026-08-30T15:00:00Z")
+            ]
+        }
+        before = extract_schedule(SAMPLE_MATCHES, "81")
+        after = extract_schedule(moved, "81")
+        assert list(before) == list(after) == [497855]
+        assert before[497855]["match_date"] != after[497855]["match_date"]
+
+    def test_carries_the_kickoff_time(self):
+        assert extract_schedule(SAMPLE_MATCHES, "81")[497855]["match_date"] == (
+            "2026-08-29T19:00:00Z"
+        )
 
     def test_an_empty_match_list_yields_an_empty_schedule(self):
         assert extract_schedule({"matches": []}, "81") == {}
 
     def test_home_match_names_the_away_side_as_opponent(self):
-        match = extract_schedule(SAMPLE_MATCHES, "81")["2026-08-29T19:00:00Z"]
+        match = extract_schedule(SAMPLE_MATCHES, "81")[497855]
         assert match["venue_status"] == "home"
         assert match["opponent_name"] == "Real Madrid CF"
         assert match["opponent_id"] == 86
 
     def test_away_match_names_the_home_side_as_opponent(self):
-        match = extract_schedule(SAMPLE_MATCHES, "86")["2026-08-29T19:00:00Z"]
+        match = extract_schedule(SAMPLE_MATCHES, "86")[497855]
         assert match["venue_status"] == "away"
         assert match["opponent_name"] == "FC Barcelona"
         assert match["opponent_id"] == 81
@@ -194,11 +212,11 @@ class TestExtractSchedule:
     def test_team_id_may_be_an_int_or_a_string(self):
         """The api reports ids as ints; callers pass them around as strings."""
         for team_id in (81, "81"):
-            match = extract_schedule(SAMPLE_MATCHES, team_id)["2026-08-29T19:00:00Z"]
+            match = extract_schedule(SAMPLE_MATCHES, team_id)[497855]
             assert match["venue_status"] == "home"
 
     def test_primera_division_is_renamed_to_la_liga(self):
-        match = extract_schedule(SAMPLE_MATCHES, "81")["2026-08-29T19:00:00Z"]
+        match = extract_schedule(SAMPLE_MATCHES, "81")[497855]
         assert match["competition_name"] == "La Liga"
 
     def test_other_competition_names_are_left_alone(self):
@@ -214,14 +232,12 @@ class TestExtractSchedule:
                 )
             ]
         }
-        match = extract_schedule(payload, "81")["2026-08-29T19:00:00Z"]
+        match = extract_schedule(payload, "81")[497855]
         assert match["competition_name"] == "UEFA Champions League"
         assert match["competition_id"] == 2001
 
     def test_carries_the_matchday(self):
-        assert extract_schedule(SAMPLE_MATCHES, "81")["2026-08-29T19:00:00Z"][
-            "matchday"
-        ] == 3
+        assert extract_schedule(SAMPLE_MATCHES, "81")[497855]["matchday"] == 3
 
 
 class TestConfiguration:
