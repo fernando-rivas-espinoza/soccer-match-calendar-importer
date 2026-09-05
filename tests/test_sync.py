@@ -142,6 +142,15 @@ class TestUpsertEvent:
         assert upsert_event(calendar, uid, document, existing) == "updated"
         assert calendar.saves == [uid]
 
+    def test_creating_twice_does_not_duplicate(self, fixtures_file):
+        """Second safety net: caldav PUTs to a url derived from the uid, so even
+        a lookup that wrongly reports the event as absent overwrites it."""
+        calendar = FakeCalendar()
+        uid, document = next(split_calendar(read_calendar_file(fixtures_file)))
+        upsert_event(calendar, uid, document, {})
+        upsert_event(calendar, uid, document, {})
+        assert len(calendar.stored) == 1
+
     def test_an_update_overwrites_the_stored_document(self, fixtures_file):
         calendar = FakeCalendar()
         uid, document = next(split_calendar(read_calendar_file(fixtures_file)))
