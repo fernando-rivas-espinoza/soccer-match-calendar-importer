@@ -8,7 +8,6 @@ update a rescheduled match in place instead of adding a second copy of it.
 
 from typing import Dict, Iterator, Tuple
 
-from caldav.lib import error
 from icalendar import Calendar as ICalendar
 
 CALENDAR_NAME = "Soccer"
@@ -39,19 +38,37 @@ def split_calendar(ics_text: str) -> Iterator[Tuple[str, str]]:
         yield str(vevent["UID"]), document.to_ical().decode("utf-8")
 
 
-def upsert_event(calendar, uid: str, document: str) -> str:
+def existing_by_uid(calendar) -> Dict[str, object]:
+    """Index the events already on the server by uid, in a single request.
+
+    `Calendar.event_by_uid` would be the obvious call, but it issues a uid
+    filtered REPORT that iCloud answers with 412 Precondition Failed. Listing
+    the calendar once and indexing it here works there, works on servers that
+    do support the query, and costs one request rather than one per fixture.
+    """
+    found = {}
+
+    for event in calendar.events():
+        component = event.icalendar_component
+        if component is not None and component.get("UID"):
+            found[str(component["UID"])] = event
+
+    return found
+
+
+def upsert_event(calendar, uid: str, document: str, existing: Dict[str, object]) -> str:
     """Create the event, or overwrite the one already stored under this uid.
 
     Returns "created" or "updated" so the caller can report what happened.
     """
-    try:
-        existing = calendar.event_by_uid(uid)
-    except error.NotFoundError:
+    stored = existing.get(uid)
+
+    if stored is None:
         calendar.save_event(document)
         return "created"
 
-    existing.data = document
-    existing.save()
+    stored.data = document
+    stored.save()
     return "updated"
 
 
@@ -63,11 +80,14 @@ def sync_calendar(calendar, path: str = FIXTURES_PATH, dry_run: bool = False) ->
     refresh window has usually just fallen outside it, not been cancelled.
     """
     counts = {"created": 0, "updated": 0}
+    existing = existing_by_uid(calendar)
 
     for uid, document in split_calendar(read_calendar_file(path)):
         if dry_run:
-            counts["created"] += 1
+            # Reported from what the server actually holds, so a dry run says
+            # the same thing the real run will do.
+            counts["updated" if uid in existing else "created"] += 1
             continue
-        counts[upsert_event(calendar, uid, document)] += 1
+        counts[upsert_event(calendar, uid, document, existing)] += 1
 
     return counts

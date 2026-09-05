@@ -1,9 +1,9 @@
 """Tests for src/sync.py against an in-memory stand-in for a CalDAV calendar."""
 
 import pytest
-from caldav.lib import error
 
 from src.sync import (
+    existing_by_uid,
     read_calendar_file,
     split_calendar,
     sync_calendar,
@@ -42,23 +42,32 @@ class FakeEvent:
         self.uid = uid
         self.data = calendar.stored[uid]
 
+    @property
+    def icalendar_component(self):
+        return {"UID": self.uid}
+
     def save(self):
         self.calendar.stored[self.uid] = self.data
         self.calendar.saves.append(self.uid)
 
 
 class FakeCalendar:
-    """Records writes instead of talking to a server."""
+    """Records writes instead of talking to a server.
+
+    Models only what iCloud actually supports: listing the calendar. It has no
+    event_by_uid, because iCloud answers that query with 412 and any code that
+    reaches for it here should fail in the tests too.
+    """
 
     def __init__(self):
         self.stored = {}
         self.saves = []
         self.creates = []
+        self.listings = 0
 
-    def event_by_uid(self, uid):
-        if uid not in self.stored:
-            raise error.NotFoundError(uid)
-        return FakeEvent(self, uid)
+    def events(self):
+        self.listings += 1
+        return [FakeEvent(self, uid) for uid in self.stored]
 
     def save_event(self, data):
         uid = next(
@@ -122,22 +131,23 @@ class TestUpsertEvent:
     def test_creates_an_event_that_is_not_there_yet(self, fixtures_file):
         calendar = FakeCalendar()
         uid, document = next(split_calendar(read_calendar_file(fixtures_file)))
-        assert upsert_event(calendar, uid, document) == "created"
+        assert upsert_event(calendar, uid, document, {}) == "created"
         assert calendar.creates == [uid]
 
     def test_updates_an_event_that_already_exists(self, fixtures_file):
         calendar = FakeCalendar()
         uid, document = next(split_calendar(read_calendar_file(fixtures_file)))
-        upsert_event(calendar, uid, document)
-        assert upsert_event(calendar, uid, document) == "updated"
+        upsert_event(calendar, uid, document, {})
+        existing = existing_by_uid(calendar)
+        assert upsert_event(calendar, uid, document, existing) == "updated"
         assert calendar.saves == [uid]
 
     def test_an_update_overwrites_the_stored_document(self, fixtures_file):
         calendar = FakeCalendar()
         uid, document = next(split_calendar(read_calendar_file(fixtures_file)))
-        upsert_event(calendar, uid, document)
+        upsert_event(calendar, uid, document, {})
         moved = document.replace("DTSTART:20260829T190000Z", "DTSTART:20260830T150000Z")
-        upsert_event(calendar, uid, moved)
+        upsert_event(calendar, uid, moved, existing_by_uid(calendar))
         assert "DTSTART:20260830T150000Z" in calendar.stored[uid]
 
 
@@ -174,3 +184,20 @@ class TestSyncCalendar:
         assert counts["created"] == 2
         assert calendar.stored == {}
         assert calendar.creates == []
+
+    def test_dry_run_reports_updates_for_events_already_on_the_server(
+        self, fixtures_file
+    ):
+        """A dry run must predict what the real run does, not assume an empty calendar."""
+        calendar = FakeCalendar()
+        sync_calendar(calendar, fixtures_file)
+        assert sync_calendar(calendar, fixtures_file, dry_run=True) == {
+            "created": 0,
+            "updated": 2,
+        }
+
+    def test_the_server_is_listed_once_not_once_per_fixture(self, fixtures_file):
+        """iCloud rejects the per-uid REPORT, and 36 round trips would be wasteful."""
+        calendar = FakeCalendar()
+        sync_calendar(calendar, fixtures_file)
+        assert calendar.listings == 1

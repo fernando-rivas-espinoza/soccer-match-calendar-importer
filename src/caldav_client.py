@@ -22,18 +22,24 @@ def connect() -> DAVClient:
     is for every modern account.
     """
     load_dotenv()
-    apple_id = os.getenv("APPLE_ID")
-    app_password = os.getenv("APPLE_APP_PASSWORD")
+    icloud_id = os.getenv("ICLOUD_ID")
+    icloud_password = os.getenv("ICLOUD_PASSWORD")
 
-    if not apple_id or not app_password:
+    missing = [
+        name
+        for name, value in (("ICLOUD_ID", icloud_id), ("ICLOUD_PASSWORD", icloud_password))
+        if not value
+    ]
+    if missing:
         raise RuntimeError(
-            "APPLE_ID and APPLE_APP_PASSWORD must be set; add them to .env. "
-            "The password is an app-specific password from appleid.apple.com, "
-            "not your Apple ID password."
+            f"{' and '.join(missing)} must be set; add to .env. ICLOUD_ID is the "
+            "Apple ID email for the account, and ICLOUD_PASSWORD must be an "
+            "app-specific password from appleid.apple.com, not the Apple ID "
+            "password itself."
         )
 
     return DAVClient(
-        url=ICLOUD_CALDAV_URL, username=apple_id, password=app_password
+        url=ICLOUD_CALDAV_URL, username=icloud_id, password=icloud_password
     )
 
 
