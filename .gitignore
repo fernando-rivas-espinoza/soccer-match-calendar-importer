@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Output files
+fixtures.ics
+teams_schedule.json
+european_teams.json
